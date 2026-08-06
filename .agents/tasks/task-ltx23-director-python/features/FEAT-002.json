@@ -2,7 +2,7 @@
   "id": "FEAT-002",
   "type": "fix",
   "description": "Fix CELL 2 model download section: replace broken HuggingFace URLs (KIJAI_23 base URL pointing to non-existent repo) with correct repositories and add multi-URL fallback mechanism with improved error reporting.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Modify _dl() to capture and display both stdout and stderr in error messages",
     "Add _dl_multi() helper that accepts a list of URLs and tries each in sequence",
@@ -19,5 +19,5 @@
     "python -c \"import ast; ast.parse(open('LTX-2.3-Director-MV.py').read()); print('AST parse OK')\""
   ],
   "blocked_reason": null,
-  "findings": null
+  "findings": "Successfully replaced all broken KIJAI_23 URLs (Kijai/LTX2.3_comfy - non-existent repo) with verified HuggingFace repositories. Added _dl_multi() fallback mechanism. Enhanced _dl() error reporting to capture stdout in addition to stderr. All 8 core model downloads + 4 LoRA downloads now use multi-URL fallback. AST parse verified."
 }
