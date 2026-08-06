@@ -74,6 +74,18 @@ def _shell(cmd):
     subprocess.run(cmd, shell=True, check=True)
 
 
+def _shell_safe(cmd):
+    """Run a shell command but only warn on failure instead of raising.
+
+    Use for non-critical operations (custom node clones, optional pip installs)
+    so that a missing repo or transient failure does not halt the entire setup.
+    """
+    try:
+        subprocess.run(cmd, shell=True, check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"[WARNING] Command failed (non-fatal): {cmd}\n  -> {e}")
+
+
 def _pip(packages):
     """pip install helper."""
     _shell(f"pip install -q {packages}")
@@ -99,9 +111,10 @@ _pip("av spandrel albumentations onnx opencv-python onnxruntime")
 _pip("imageio imageio-ffmpeg")
 _pip("transformers>=4.43.0 accelerate huggingface_hub")
 
-# -- ComfyUI (pinned branch) --
-# !git clone --branch ComfyUI_22_01_2026_v0.10.0 https://github.com/Isi-dev/ComfyUI.git
-_shell("git clone --branch ComfyUI_22_01_2026_v0.10.0 https://github.com/Isi-dev/ComfyUI.git /content/ComfyUI")
+# -- ComfyUI (official repo, no branch pin for stability) --
+# !git clone https://github.com/comfyanonymous/ComfyUI.git /content/ComfyUI
+if not os.path.exists("/content/ComfyUI"):
+    _shell("git clone https://github.com/comfyanonymous/ComfyUI.git /content/ComfyUI")
 _shell("pip install -r /content/ComfyUI/requirements.txt -q")
 
 # -- Custom nodes --
@@ -110,35 +123,41 @@ CUSTOM_NODES = "/content/ComfyUI/custom_nodes"
 os.makedirs(CUSTOM_NODES, exist_ok=True)
 
 # Core KJNodes (VAELoaderKJ, ModelPreviewOverrideKJ, etc.)
-# !git clone --branch kj_1.2.6 https://github.com/Isi-dev/ComfyUI_KJNodes
-_shell(f"git clone --branch kj_1.2.6 https://github.com/Isi-dev/ComfyUI_KJNodes {CUSTOM_NODES}/ComfyUI_KJNodes")
+# !git clone https://github.com/kijai/ComfyUI-KJNodes.git
+if not os.path.exists(f"{CUSTOM_NODES}/ComfyUI-KJNodes"):
+    _shell_safe(f"git clone https://github.com/kijai/ComfyUI-KJNodes.git {CUSTOM_NODES}/ComfyUI-KJNodes")
 
 # GGUF loader (UnetLoaderGGUF)
-# !git clone --branch ComfyUI_GGUF_22_01_2026 https://github.com/Isi-dev/ComfyUI_GGUF.git
-_shell(f"git clone --branch ComfyUI_GGUF_22_01_2026 https://github.com/Isi-dev/ComfyUI_GGUF.git {CUSTOM_NODES}/ComfyUI_GGUF")
+# !git clone https://github.com/city96/ComfyUI-GGUF.git
+if not os.path.exists(f"{CUSTOM_NODES}/ComfyUI-GGUF"):
+    _shell_safe(f"git clone https://github.com/city96/ComfyUI-GGUF.git {CUSTOM_NODES}/ComfyUI-GGUF")
 
 # LTXVideo nodes (LTXVConditioning, LTXVConcatAVLatent, LTXVSeparateAVLatent, etc.)
 # !git clone https://github.com/Lightricks/ComfyUI-LTXVideo.git
-_shell(f"git clone https://github.com/Lightricks/ComfyUI-LTXVideo.git {CUSTOM_NODES}/ComfyUI-LTXVideo")
+if not os.path.exists(f"{CUSTOM_NODES}/ComfyUI-LTXVideo"):
+    _shell_safe(f"git clone https://github.com/Lightricks/ComfyUI-LTXVideo.git {CUSTOM_NODES}/ComfyUI-LTXVideo")
 
 # VideoHelperSuite (VHS_VideoCombine)
 # !git clone https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git
-_shell(f"git clone https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git {CUSTOM_NODES}/ComfyUI-VideoHelperSuite")
+if not os.path.exists(f"{CUSTOM_NODES}/ComfyUI-VideoHelperSuite"):
+    _shell_safe(f"git clone https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git {CUSTOM_NODES}/ComfyUI-VideoHelperSuite")
 
 # rgthree-comfy (Power Lora Loader)
 # !git clone https://github.com/rgthree/rgthree-comfy.git
-_shell(f"git clone https://github.com/rgthree/rgthree-comfy.git {CUSTOM_NODES}/rgthree-comfy")
+if not os.path.exists(f"{CUSTOM_NODES}/rgthree-comfy"):
+    _shell_safe(f"git clone https://github.com/rgthree/rgthree-comfy.git {CUSTOM_NODES}/rgthree-comfy")
 
 # whatdreamscost-comfyui (LTXDirector, LTXDirectorGuide, LTXDirectorCropGuides)
 # !git clone https://github.com/whatdreamscost/whatdreamscost-comfyui.git
-_shell(f"git clone https://github.com/whatdreamscost/whatdreamscost-comfyui.git {CUSTOM_NODES}/whatdreamscost-comfyui")
+if not os.path.exists(f"{CUSTOM_NODES}/whatdreamscost-comfyui"):
+    _shell_safe(f"git clone https://github.com/whatdreamscost/whatdreamscost-comfyui.git {CUSTOM_NODES}/whatdreamscost-comfyui")
 
 # -- Install custom node requirements --
-for node_dir in ["ComfyUI_KJNodes", "ComfyUI_GGUF", "ComfyUI-LTXVideo",
+for node_dir in ["ComfyUI-KJNodes", "ComfyUI-GGUF", "ComfyUI-LTXVideo",
                  "ComfyUI-VideoHelperSuite", "rgthree-comfy", "whatdreamscost-comfyui"]:
     req_path = f"{CUSTOM_NODES}/{node_dir}/requirements.txt"
     if os.path.exists(req_path):
-        _shell(f"pip install -r {req_path} -q 2>/dev/null || true")
+        _shell_safe(f"pip install -r {req_path} -q")
 
 # -- System packages --
 subprocess.run(["apt-get", "-y", "install", "-qq", "aria2", "ffmpeg"],
