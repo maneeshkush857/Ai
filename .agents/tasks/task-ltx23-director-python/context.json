@@ -1,0 +1,19 @@
+{
+  "project_type": "Python script for Google Colab - AI video generation using ComfyUI nodes",
+  "language": "Python",
+  "build_system": "None (single-file Colab script)",
+  "test_framework": "None (no tests - this is a Colab notebook script)",
+  "build_command": "python -c \"import ast; ast.parse(open('Ai/LTX-2.3-Director-MV.py').read())\"",
+  "test_command": "python -c \"import ast; ast.parse(open('Ai/LTX-2.3-Director-MV.py').read())\"",
+  "verification_instructions": "Parse the generated Python file as valid AST (syntax check)",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "No setup needed - this is a code generation task producing a single Python file",
+  "environment_constraints": "INTEGRATIONS_ONLY network - cannot run actual ComfyUI or download models. Validation is AST parsing only.",
+  "contribution_requirements": "No CONTRIBUTING.md. The new file should follow the same style as LTX-PRO.py.",
+  "key_patterns": "ComfyUI NODE_CLASS_MAPPINGS pattern: instantiate node class, call its method (FUNCTION attribute or known method like load_vae, encode, etc.), extract outputs with get_value_at_index(). VRAM management with _vram_free(). Shell commands via subprocess for downloads. LoRA application via Power Lora Loader or LoraLoaderModelOnly fallback. Two-pass sampling pipeline: Pass 1 (full denoise) -> upscale -> Pass 2 (partial denoise).",
+  "relevant_files": [
+    "Ai/LTX-PRO.py",
+    "Ai/1. LTX 2.3_Director_2.0 MV Workflow 30s 260802-2.json"
+  ],
+  "directory_structure": "Ai/ - repository root containing the reference Python file and the JSON workflow to convert"
+}

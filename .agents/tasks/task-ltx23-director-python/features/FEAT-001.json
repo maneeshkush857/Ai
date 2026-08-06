@@ -1,0 +1,43 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Create a new Python file 'Ai/LTX-2.3-Director-MV.py' that converts the JSON workflow '1. LTX 2.3_Director_2.0 MV Workflow 30s 260802-2.json' into executable Python code. The file must replicate ALL features from the JSON (Director 2.0 with timeline, 4 LoRAs, two-pass pipeline with audio, 31.5s/756-frame generation at 24fps, 1280x720) using the same coding patterns as the reference LTX-PRO.py.",
+  "status": "in_progress",
+  "steps": [
+    "Create the new file Ai/LTX-2.3-Director-MV.py with the following sections:",
+    "CELL 1 - ENVIRONMENT SETUP: Install packages (torch, torchsde, einops, diffusers, accelerate, etc.), clone ComfyUI and custom nodes (ComfyUI_KJNodes, ComfyUI_GGUF, ComfyUI-LTXVideo, ComfyUI-VideoHelperSuite, rgthree-comfy for Power Lora Loader, whatdreamscost-comfyui for LTXDirector/LTXDirectorGuide/LTXDirectorCropGuides). Use subprocess-based _shell() helper plus Colab !magic for compatibility, same dual-pattern as LTX-PRO.py.",
+    "CELL 2 - MODEL DOWNLOADS: Download via aria2c with _dl() helper: (1) ltx-2-3-22b-dev-Q4_K_M.gguf (UNet), (2) gemma_3_12B_it_fp4_mixed.safetensors (CLIP1), (3) ltx-2.3_text_projection_bf16.safetensors (CLIP2), (4) LTX23_video_vae_bf16.safetensors, (5) LTX23_audio_vae_bf16.safetensors, (6) taeltx2_3.safetensors (TinyVAE), (7) ltx-2.3-spatial-upscaler-x2-1.1.safetensors, (8) 4 LoRAs: ltx-2.3-22b-distilled-lora-dynamic @0.4, LTX-2.3-OmniNFT-RL-Lora_bf16 @0.6, ltx2.3-transition @0.7, LTX2.3-MVCamera-drclips @0.9.",
+    "CELL 3 - CORE IMPORTS & UTILITIES: Import gc, torch, numpy, etc. Load ComfyUI nodes via _load_comfy_nodes(). Include get_value_at_index(), _vram_free(), _vram_print() helpers exactly as in LTX-PRO.py.",
+    "CELL 4 - MODEL LOADING: Load all models in proper VRAM sequence: (1) UnetLoaderGGUF for ltx-2-3-22b-dev-Q4_K_M.gguf, (2) DualCLIPLoader for gemma_3_12B_it_fp4_mixed + ltx-2.3_text_projection_bf16 (type=ltxv), (3) Power Lora Loader (rgthree) applying 4 LoRAs with strengths [0.4, 0.6, 0.7, 0.9], (4) VAELoaderKJ for taeltx2_3 (tiny preview VAE, bf16), (5) VAELoader for LTX23_audio_vae_bf16, (6) VAELoader for LTX23_video_vae_bf16, (7) LatentUpscaleModelLoader for ltx-2.3-spatial-upscaler-x2-1.1, (8) ModelPreviewOverrideKJ connecting model+tinyVAE.",
+    "CELL 5 - LTXDirector SETUP: Implement the LTXDirector node call with all parameters from the JSON: duration_seconds=31.5, frame_rate=24, custom_width=1280, custom_height=720, resize_method='maintain aspect ratio', divisible_by=32, img_compression=18. Include the full global_prompt (the ~4000-word music video performance prompt from JSON). Include the full timeline_data JSON string with 5 image segments (whatdreamscost/1.png through 5.3.png with their start/length values) and 1 audio segment (Late night trap.mp3, trimStart=446.92). Include segment_lengths, guide_strength='1.00,1.00,1.00,1.00,1.00', local_prompts=' | | | | '. The LTXDirector outputs: model, positive conditioning, video_latent, audio_latent, guide_data, motion_guide_data, frame_rate.",
+    "CELL 6 - CONDITIONING & PASS 1 PIPELINE: (1) ConditioningZeroOut on positive conditioning from LTXDirector, (2) LTXVConditioning wrapping positive+zeroed_negative at frame_rate=24 (from LTXDirector output), (3) LTXDirectorGuide (Pass 1, node 133) with strength=0.5 taking positive/negative/vae(video)/video_latent/guide_data/motion_guide_data/model, outputs positive/negative/latent/model, (4) LTXVConcatAVLatent combining video_latent from DirectorGuide + audio_latent from LTXDirector, (5) CFGGuider with cfg=1.0, (6) KSamplerSelect euler, (7) BasicScheduler linear_quadratic 8 steps denoise=1.0 using model from DirectorGuide, (8) RandomNoise seed=0 fixed, (9) SamplerCustomAdvanced Pass 1.",
+    "CELL 7 - PASS 2 PIPELINE (UPSCALE + REFINE): (1) LTXVSeparateAVLatent on Pass 1 output to split video+audio, (2) LTXDirectorCropGuides (node 55) on Pass 1 video_latent + Pass 1 positive/negative from DirectorGuide 133, (3) LTXVLatentUpsampler using cropped latent + upscale_model + video_vae, (4) LTXDirectorGuide (Pass 2, node 132) with strength=1.0 taking cropped positive/negative + video_vae + upscaled latent + guide_data + motion_guide_data + model from LTXDirector, outputs positive/negative/latent/model, (5) LTXVConcatAVLatent combining upscaled video latent + audio_latent from LTXVSeparateAVLatent(Pass1).audio_latent, (6) CFGGuider cfg=1.0, (7) KSamplerSelect euler, (8) BasicScheduler linear_quadratic 4 steps denoise=0.42 using model from DirectorGuide Pass 2, (9) SamplerCustomAdvanced Pass 2 (same noise as Pass 1).",
+    "CELL 8 - DECODE & OUTPUT: (1) LTXVSeparateAVLatent on Pass 2 output, (2) LTXDirectorCropGuides (node 54) on Pass 2 video_latent + Pass 2 positive/negative, (3) VAEDecode video using video_vae on cropped latent, (4) LTXVAudioVAEDecode using audio_latent + audio_vae, (5) VHS_VideoCombine with frame_rate=24 (from LTXDirector), format='video/h264-mp4', pix_fmt='yuv420p', crf=8, filename_prefix='LTX2.3/Video', save_output=True.",
+    "CELL 9 - CONFIGURATION & RUN: Add a configuration section with user-editable parameters (seed, global_prompt, image paths, audio path, LoRA strengths, resolution, duration, frame_rate). Add a main _run() function that executes the full pipeline. Include proper VRAM management throughout with _vram_free() calls between major stages.",
+    "Ensure the file is syntactically valid Python (parseable by ast.parse). Use the same dual-style as LTX-PRO.py with both subprocess-based _shell() calls AND Colab !magic/%cd commands for user familiarity.",
+    "Include extensive comments explaining each node mapping from the JSON workflow, referencing node IDs where helpful."
+  ],
+  "acceptance_criteria": [
+    "File Ai/LTX-2.3-Director-MV.py exists and is syntactically valid Python (ast.parse succeeds)",
+    "All 32 nodes from the JSON workflow are represented in the Python code",
+    "The two-pass pipeline is correctly implemented: Pass 1 (8 steps, denoise=1.0, euler, linear_quadratic) -> 2x upscale -> Pass 2 (4 steps, denoise=0.42, euler, linear_quadratic)",
+    "All 4 LoRAs are applied with correct filenames and strengths via Power Lora Loader pattern",
+    "LTXDirector node is called with the full global_prompt, timeline_data (5 image segments + 1 audio segment), and all parameters matching the JSON",
+    "LTXDirectorGuide is called twice: Pass 1 at strength=0.5, Pass 2 at strength=1.0",
+    "LTXDirectorCropGuides is called twice: between passes and after Pass 2",
+    "Audio pipeline is complete: audio VAE load, LTXVConcatAVLatent, LTXVSeparateAVLatent, LTXVAudioVAEDecode",
+    "VHS_VideoCombine outputs h264-mp4 at CRF=8, 24fps, yuv420p",
+    "Environment setup installs all required packages and clones all required custom nodes",
+    "Model download section downloads all 8+ model files with correct URLs",
+    "VRAM management follows the same load->use->unload pattern as LTX-PRO.py",
+    "Code follows the same style and patterns as LTX-PRO.py (NODE_CLASS_MAPPINGS, get_value_at_index, _vram_free, etc.)"
+  ],
+  "verification": [
+    "Run: python -c \"import ast; ast.parse(open('Ai/LTX-2.3-Director-MV.py').read()); print('AST parse OK')\"",
+    "Verify all key node names appear in the file: UnetLoaderGGUF, DualCLIPLoader, Power Lora Loader, VAELoaderKJ, VAELoader, LatentUpscaleModelLoader, ModelPreviewOverrideKJ, LTXDirector, LTXDirectorGuide, LTXDirectorCropGuides, ConditioningZeroOut, LTXVConditioning, RandomNoise, KSamplerSelect, BasicScheduler, CFGGuider, LTXVConcatAVLatent, LTXVLatentUpsampler, SamplerCustomAdvanced, LTXVSeparateAVLatent, VAEDecode, LTXVAudioVAEDecode, VHS_VideoCombine",
+    "Verify the global prompt text from the JSON workflow is present in the Python file",
+    "Verify LoRA filenames are present: ltx-2.3-22b-distilled-lora-dynamic, OmniNFT-RL, ltx2.3-transition, LTX2.3-MVCamera-drclips"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
