@@ -164,7 +164,12 @@ from pathlib import Path
 
 
 def _dl(url: str, dest: str, filename: str = None) -> str:
-    """Download a file with aria2c, skip if cached and >1MB."""
+    """Download a file with aria2c, skip if cached and >1MB.
+
+    Captures both stdout and stderr from aria2c for improved error reporting.
+    When aria2c returns non-zero (e.g. HTTP 404), stderr may be empty so we
+    also inspect stdout for diagnostic information.
+    """
     Path(dest).mkdir(parents=True, exist_ok=True)
     fn = filename or url.split("/")[-1].split("?")[0]
     full = os.path.join(dest, fn)
@@ -178,16 +183,65 @@ def _dl(url: str, dest: str, filename: str = None) -> str:
     print(f"  dl {fn}...", end=" ", flush=True)
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
+        # Combine stderr and stdout for diagnostics -- aria2c may report
+        # errors in either stream depending on the failure mode (404 vs
+        # network timeout vs DNS failure).
+        err_detail = (r.stderr.strip() or r.stdout.strip() or
+                      f"aria2c exit code {r.returncode}")
         raise RuntimeError(
-            f"Download failed for {fn}: {r.stderr.strip() or 'unknown error'}. "
+            f"Download failed for {fn} from {url}: {err_detail}. "
             f"Check network connection and re-run Cell 2.")
     print("done.")
     return fn
 
 
+def _dl_multi(urls: list, dest: str, filename: str = None) -> str:
+    """Try downloading from multiple URLs in order (fallback mechanism).
+
+    Accepts a list of URLs and attempts each one sequentially. Returns the
+    filename on first success. If all URLs fail, raises RuntimeError with
+    details of every attempt.
+
+    Args:
+        urls: List of full download URLs to try in priority order.
+        dest: Destination directory path.
+        filename: Optional override filename. If None, derived from last URL
+                  path component.
+
+    Returns:
+        The downloaded filename (basename only).
+    """
+    fn = filename or urls[0].split("/")[-1].split("?")[0]
+    full = os.path.join(dest, fn)
+    # Skip download if already cached
+    if os.path.exists(full) and os.path.getsize(full) > 1_000_000:
+        print(f"  cached  {fn}")
+        return fn
+
+    errors = []
+    for i, url in enumerate(urls, 1):
+        try:
+            result = _dl(url, dest, filename=fn)
+            return result
+        except RuntimeError as e:
+            errors.append(f"  Attempt {i}/{len(urls)} ({url}): {e}")
+            # Clean up any partial/empty file before trying next URL
+            if os.path.exists(full) and os.path.getsize(full) < 1_000_000:
+                os.remove(full)
+            continue
+
+    # All URLs failed
+    raise RuntimeError(
+        f"All download sources failed for {fn}:\n" + "\n".join(errors) + "\n"
+        f"Please verify HuggingFace repo availability and re-run Cell 2."
+    )
+
+
 # -- Download directories --
-KIJAI_23 = "https://huggingface.co/Kijai/LTX2.3_comfy/resolve/main"
+KIJAI_GGUF = "https://huggingface.co/Kijai/LTX-Video-2.3-GGUF/resolve/main"
+CITY96_GGUF = "https://huggingface.co/city96/LTX-Video-2.3-gguf/resolve/main"
 CORG = "https://huggingface.co/Comfy-Org/ltx-2/resolve/main/split_files"
+LTX_LIGHT = "https://huggingface.co/Lightricks/LTX-Video-2.3/resolve/main"
 LTX_HF = "https://huggingface.co/Lightricks"
 UNET_D = "/content/ComfyUI/models/unet"
 TE_D = "/content/ComfyUI/models/text_encoders"
@@ -201,31 +255,43 @@ LR_D = "/content/ComfyUI/models/loras"
 print("-- Core Models --")
 
 # Node 135: UnetLoaderGGUF - ltx-2-3-22b-dev-Q4_K_M.gguf
-_M_UNET = _dl(
-    f"{KIJAI_23}/diffusion_models/ltx-2-3-22b-dev-Q4_K_M.gguf", UNET_D
-)
+_M_UNET = _dl_multi([
+    f"{CITY96_GGUF}/ltx-2-3-22b-dev-Q4_K_M.gguf",
+    f"{KIJAI_GGUF}/ltx-2-3-22b-dev-Q4_K_M.gguf",
+], UNET_D)
 
 # Node 12: DualCLIPLoader - gemma_3_12B + ltx-2.3 text projection
 _M_CLIP1 = _dl(
     f"{CORG}/text_encoders/gemma_3_12B_it_fp4_mixed.safetensors", TE_D
 )
-_M_CLIP2 = _dl(
-    f"{KIJAI_23}/text_encoders/ltx-2.3_text_projection_bf16.safetensors", TE_D
-)
+_M_CLIP2 = _dl_multi([
+    f"{KIJAI_GGUF}/text_encoders/ltx-2.3_text_projection_bf16.safetensors",
+    f"{LTX_LIGHT}/ltx-2.3_text_projection_bf16.safetensors",
+], TE_D)
 
 # Node 36: VAELoader - LTX23_video_vae_bf16.safetensors
-_M_VVAE = _dl(f"{KIJAI_23}/vae/LTX23_video_vae_bf16.safetensors", VAE_D)
+_M_VVAE = _dl_multi([
+    f"{KIJAI_GGUF}/vae/LTX23_video_vae_bf16.safetensors",
+    f"{LTX_LIGHT}/LTX23_video_vae_bf16.safetensors",
+], VAE_D)
 
 # Node 8: VAELoader - LTX23_audio_vae_bf16.safetensors
-_M_AVAE = _dl(f"{KIJAI_23}/vae/LTX23_audio_vae_bf16.safetensors", VAE_D)
+_M_AVAE = _dl_multi([
+    f"{KIJAI_GGUF}/vae/LTX23_audio_vae_bf16.safetensors",
+    f"{LTX_LIGHT}/LTX23_audio_vae_bf16.safetensors",
+], VAE_D)
 
 # Node 6: VAELoaderKJ - taeltx2_3.safetensors (tiny preview VAE)
-_M_TAEV = _dl(f"{KIJAI_23}/vae/taeltx2_3.safetensors", VAE_D)
+_M_TAEV = _dl_multi([
+    f"{KIJAI_GGUF}/vae/taeltx2_3.safetensors",
+    "https://huggingface.co/madebyollin/taeltxv/resolve/main/taeltx2_3.safetensors",
+], VAE_D)
 
 # Node 13: LatentUpscaleModelLoader - ltx-2.3-spatial-upscaler-x2-1.1
-_M_UP = _dl(
-    f"{LTX_HF}/LTX-2/resolve/main/ltx-2.3-spatial-upscaler-x2-1.1.safetensors", UPD
-)
+_M_UP = _dl_multi([
+    f"{LTX_HF}/LTX-Video/resolve/main/ltx-2.3-spatial-upscaler-x2-1.1.safetensors",
+    f"{LTX_HF}/LTX-2/resolve/main/ltx-2.3-spatial-upscaler-x2-1.1.safetensors",
+], UPD)
 
 # ============================================================
 # LoRAs (Node 138: Power Lora Loader - 4 LoRAs)
@@ -233,25 +299,25 @@ _M_UP = _dl(
 print("\n-- LoRAs --")
 
 # LoRA 1: ltx-2.3-22b-distilled-lora-dynamic @ 0.4
-_dl(
-    f"{KIJAI_23}/loras/ltx-2.3-22b-distilled-lora-dynamic_fro09_avg_rank_105_bf16.safetensors",
-    LR_D
-)
+_dl_multi([
+    f"{KIJAI_GGUF}/loras/ltx-2.3-22b-distilled-lora-dynamic_fro09_avg_rank_105_bf16.safetensors",
+    f"{LTX_HF}/LTX-Video-2.3-loras/resolve/main/ltx-2.3-22b-distilled-lora-dynamic_fro09_avg_rank_105_bf16.safetensors",
+], LR_D)
 # LoRA 2: LTX-2.3-OmniNFT-RL-Lora_bf16 @ 0.6
-_dl(
-    "https://huggingface.co/Kijai/LTX2.3_comfy/resolve/main/loras/LTX-2.3-OmniNFT-RL-Lora_bf16.safetensors",
-    LR_D
-)
+_dl_multi([
+    f"{KIJAI_GGUF}/loras/LTX-2.3-OmniNFT-RL-Lora_bf16.safetensors",
+    f"{LTX_HF}/LTX-Video-2.3-loras/resolve/main/LTX-2.3-OmniNFT-RL-Lora_bf16.safetensors",
+], LR_D)
 # LoRA 3: ltx2.3-transition @ 0.7
-_dl(
-    "https://huggingface.co/Kijai/LTX2.3_comfy/resolve/main/loras/ltx2.3-transition.safetensors",
-    LR_D
-)
+_dl_multi([
+    f"{KIJAI_GGUF}/loras/ltx2.3-transition.safetensors",
+    f"{LTX_HF}/LTX-Video-2.3-loras/resolve/main/ltx2.3-transition.safetensors",
+], LR_D)
 # LoRA 4: LTX2.3-MVCamera-drclips @ 0.9
-_dl(
-    "https://huggingface.co/Kijai/LTX2.3_comfy/resolve/main/loras/LTX2.3-MVCamera-drclips.safetensors",
-    LR_D
-)
+_dl_multi([
+    f"{KIJAI_GGUF}/loras/LTX2.3-MVCamera-drclips.safetensors",
+    f"{LTX_HF}/LTX-Video-2.3-loras/resolve/main/LTX2.3-MVCamera-drclips.safetensors",
+], LR_D)
 
 print("\nAll models ready.")
 

@@ -1,0 +1,23 @@
+{
+  "id": "FEAT-002",
+  "type": "fix",
+  "description": "Fix CELL 2 model download section: replace broken HuggingFace URLs (KIJAI_23 base URL pointing to non-existent repo) with correct repositories and add multi-URL fallback mechanism with improved error reporting.",
+  "status": "in_progress",
+  "steps": [
+    "Modify _dl() to capture and display both stdout and stderr in error messages",
+    "Add _dl_multi() helper that accepts a list of URLs and tries each in sequence",
+    "Update all download calls with correct HuggingFace repository URLs and fallbacks",
+    "Verify file passes AST parse"
+  ],
+  "acceptance_criteria": [
+    "_dl() reports both stdout and stderr on failure",
+    "_dl_multi() exists and tries URLs in order with proper fallback",
+    "All download URLs use verified HuggingFace repositories",
+    "File remains valid Python (ast.parse succeeds)"
+  ],
+  "verification": [
+    "python -c \"import ast; ast.parse(open('LTX-2.3-Director-MV.py').read()); print('AST parse OK')\""
+  ],
+  "blocked_reason": null,
+  "findings": null
+}
