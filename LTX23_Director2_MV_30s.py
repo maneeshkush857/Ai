@@ -28,7 +28,8 @@ def install_packages():
         "torch", "torchvision", "torchaudio",
         "torchsde", "einops", "diffusers", "accelerate",
         "av", "spandrel", "albumentum", "onnx", "opencv-python", "onnxruntime",
-        "nest_asyncio"
+        "nest_asyncio",
+        "kornia==0.7.3",
     ]
     subprocess.run(
         [sys.executable, "-m", "pip", "install", "-q"] + packages,
@@ -101,6 +102,14 @@ def install_system_packages():
 # --- Set up sys.path and imports ---
 sys.path.insert(0, "/content/ComfyUI")
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
+# --- Register model folder paths so ComfyUI can locate downloaded models ---
+import folder_paths
+folder_paths.add_model_folder_path("unet", "/content/ComfyUI/models/unet")
+folder_paths.add_model_folder_path("text_encoders", "/content/ComfyUI/models/text_encoders")
+folder_paths.add_model_folder_path("vae", "/content/ComfyUI/models/vae")
+folder_paths.add_model_folder_path("loras", "/content/ComfyUI/models/loras")
+folder_paths.add_model_folder_path("latent_upscale_models", "/content/ComfyUI/models/latent_upscale_models")
 
 import torch
 import gc
@@ -517,6 +526,11 @@ def main_ltx_director_mv(
         ]
 
     # Load custom nodes (async-safe for Colab)
+    # Mock PromptServer.instance for headless/script mode (required by KJNodes and others)
+    import server
+    if not hasattr(server.PromptServer, 'instance'):
+        server.PromptServer.instance = server.PromptServer(None)
+
     import_custom_nodes()
 
     from nodes import NODE_CLASS_MAPPINGS
